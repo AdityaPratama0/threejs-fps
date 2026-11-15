@@ -1,0 +1,1 @@
+Read ~/projects/threejs-fps/TASK.md and do exactly what it says, to completion.

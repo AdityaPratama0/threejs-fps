@@ -1,0 +1,1 @@
+withheld: original system prompt is preserved in the recorded Claude Code session context
