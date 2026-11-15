@@ -24,8 +24,6 @@ export function beginMatch(rng) {
   state.round = 0;
   state.scoreAttack = 0;
   state.scoreDefend = 0;
-  state.attackWins = 0;
-  state.defendWins = 0;
   state.lossStreak.attack = 0;
   state.lossStreak.defend = 0;
   state.matchOver = false;
@@ -115,7 +113,6 @@ function plantBomb(carrier, site) {
   const bomb = state.bomb;
   bomb.state = 'planted';
   bomb.carrier = null;
-  bomb.planter = carrier;
   bomb.position.x = carrier.body.pos.x;
   bomb.position.y = 0.05;
   bomb.position.z = carrier.body.pos.z;

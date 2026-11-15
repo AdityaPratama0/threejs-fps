@@ -341,4 +341,3 @@ export function reportShot(shooter) {
     bot.ai.heardZ = shooter.body.pos.z;
   }
 }
-

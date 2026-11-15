@@ -16,7 +16,6 @@
     --muted: #a3b9b4;
     --accent: #e07a3c;
     --wound: #8c3226;
-    --panel: 2px;
     --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
     --font-readout: ui-monospace, 'SF Mono', Menlo, monospace;
   }
@@ -60,7 +59,7 @@
   .team-score .tag { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
   #score-attack, #score-defend { font-size: 30px; line-height: 1; color: var(--ink); }
   #score-attack { color: var(--accent); }
-  #topline .middle { text-align: center; }
+  #topline .middle { display: grid; justify-items: center; gap: 3px; text-align: center; }
   #clock { font-size: 24px; line-height: 1; letter-spacing: .02em; }
   #round-label { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
 

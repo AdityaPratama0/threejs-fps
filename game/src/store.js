@@ -5,14 +5,11 @@ import { ECONOMY } from './config.js';
 
 export const state = {
   time: 0,
-  tick: 0,
   phase: 'warmup',
   phaseTimer: 0,
   round: 1,
   scoreAttack: 0,
   scoreDefend: 0,
-  attackWins: 0,
-  defendWins: 0,
   lossStreak: { attack: 0, defend: 0 },
   playerTeam: 'attack',
   agents: [],
@@ -84,10 +81,8 @@ export function lossAward(streak) {
 export function addScore(team, points) {
   if (team === 'attack') {
     state.scoreAttack += points;
-    state.attackWins += 1;
   } else {
     state.scoreDefend += points;
-    state.defendWins += 1;
   }
   state.roundReason = '';
 }

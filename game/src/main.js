@@ -250,8 +250,8 @@ function setupShot(name) {
     state.bomb.position.z = -14;
     state.bomb.timer = 26.4;
     state.bomb.beepTimer = 0.3;
-    placeBody(player.body, 17.5, -17.5);
-    aimAt(19, 0.15, -13.5);
+    placeBody(player.body, 16, -14);
+    aimAt(19, 0.2, -14);
     settle(3);
     hud.update();
   } else if (name === 'end') {

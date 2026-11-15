@@ -21,7 +21,6 @@ export function createSim(seed = 7) {
     },
     step(dt, input) {
       state.time += dt;
-      state.tick += 1;
       if (state.paused) return;
 
       // The player's own weapon ticks inside stepPlayer; the bots' tick here.

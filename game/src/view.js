@@ -318,7 +318,7 @@ export function createView(scene, camera) {
       const visible = bomb.state === 'planted' || bomb.state === 'dropped';
       bombGroup.visible = visible;
       if (visible) {
-        bombGroup.position.set(bomb.position.x, bomb.state === 'planted' ? 0.13 : 0.13, bomb.position.z);
+        bombGroup.position.set(bomb.position.x, 0.13, bomb.position.z);
         bombGroup.rotation.y += dt * 0.4;
         const pulse = bomb.state === 'planted' ? Math.max(0, Math.sin(state.time * (bomb.timer < 10 ? 18 : 8))) : 0;
         bombLight.intensity = pulse * 6;
