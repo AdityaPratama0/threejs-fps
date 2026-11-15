@@ -1,123 +1,131 @@
-// Player movement: acceleration, friction, gravity, crouch and jump, resolved as a box against
-// the world's colliders one axis at a time, so a wall never swallows the player.
-import * as THREE from 'three';
+// The player's controls: keys and mouse into wishes, then the same movement, gunfire and grenade
+// code the bots use. Nothing here renders; it writes yaw, pitch and body state that the
+// simulation steps and the view reads.
+import { state, say } from './store.js';
+import { stepBody } from './movement.js';
+import { currentGun, currentSpec } from './agents.js';
+import { stepWeapon, tryFire, startReload } from './combat.js';
+import { throwGrenade } from './grenades.js';
+import { siteAt } from './map.js';
+import { playerCarriesBomb } from './rounds.js';
 
-const RADIUS = 0.34;
-const STAND_HEIGHT = 1.72;
-const CROUCH_HEIGHT = 1.12;
-const STAND_EYE = 1.6;
-const CROUCH_EYE = 1.02;
-const WALK_SPEED = 5.2;
-const CROUCH_SPEED = 2.4;
-const GROUND_ACCEL = 42;
-const AIR_ACCEL = 9;
-const FRICTION = 9;
-const GRAVITY = 20;
-const JUMP_SPEED = 6.2;
+const controls = {
+  forward: 0,
+  strafe: 0,
+  jump: false,
+  crouch: false,
+  fire: false,
+  reload: false,
+  plant: false,
+};
 
-export function createPlayer(colliders) {
-  const player = {
-    position: new THREE.Vector3(0, 0, 9.5),
-    velocity: new THREE.Vector3(),
-    yaw: 0,
-    pitch: 0,
-    eye: STAND_EYE,
-    onGround: true,
-    crouching: false,
-    height: STAND_HEIGHT,
-  };
-  const probe = new THREE.Box3();
-  const wish = new THREE.Vector3();
+const trigger = { held: false, semiWasDown: false };
 
-  // lift keeps the feet and the crown out of the horizontal tests, so standing on the floor
-  // is not read as walking into a wall.
-  function overlaps(x, y, z, height, lift) {
-    probe.min.set(x - RADIUS, y + lift, z - RADIUS);
-    probe.max.set(x + RADIUS, y + height - lift, z + RADIUS);
-    for (const collider of colliders) if (probe.intersectsBox(collider)) return collider;
-    return null;
+export function look(dx, dy, sensitivity = 0.0021) {
+  const player = state.player;
+  if (player === null || !state.started) return;
+  player.yaw -= dx * sensitivity;
+  player.pitch = Math.max(-1.42, Math.min(1.42, player.pitch - dy * sensitivity));
+}
+
+export function readControls(input) {
+  const keys = input.keys;
+  controls.forward = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+  controls.strafe = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+  controls.jump = keys.has('Space');
+  controls.crouch = keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC');
+  controls.fire = input.firing;
+  controls.reload = keys.has('KeyR');
+  controls.plant = keys.has('KeyE');
+  return controls;
+}
+
+export function useSlot(player, slot) {
+  if (slot === 'primary' && player.guns.primary === null) return false;
+  if ((slot === 'cinder' || slot === 'dazzle') && player.grenades[slot] <= 0) return false;
+  if (player.slot === slot) return false;
+  player.reloadLeft = 0;
+  player.slot = slot;
+  if (slot === 'cinder') say('Cinder ready: fire to throw.', 1.2);
+  if (slot === 'dazzle') say('Dazzle ready: fire to throw.', 1.2);
+  return true;
+}
+
+export function cycleSlot(player, step) {
+  const order = ['primary', 'sidearm'];
+  if (player.grenades.cinder > 0) order.push('cinder');
+  if (player.grenades.dazzle > 0) order.push('dazzle');
+  const usable = order.filter((slot) => slot === 'sidearm' || (slot === 'primary' ? player.guns.primary !== null : true));
+  if (usable.length === 0) return;
+  const at = usable.indexOf(player.slot);
+  const next = usable[(at + step + usable.length) % usable.length];
+  useSlot(player, next);
+}
+
+function throwSelected(player, kind) {
+  if (player.grenades[kind] <= 0) return;
+  player.grenades[kind] -= 1;
+  throwGrenade(player, kind);
+  player.cooldown = 0.55;
+  player.slot = player.guns.primary ? 'primary' : 'sidearm';
+}
+
+export function stepPlayer(dt, input) {
+  const player = state.player;
+  if (player === null || !state.started) return;
+  const c = readControls(input);
+  stepWeapon(player, dt);
+  if (!player.alive) {
+    state.plantHeld = false;
+    trigger.semiWasDown = false;
+    trigger.held = false;
+    return;
   }
 
-  function look(dx, dy, sensitivity = 0.0022) {
-    player.yaw -= dx * sensitivity;
-    player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - dy * sensitivity));
+  const sin = Math.sin(player.yaw);
+  const cos = Math.cos(player.yaw);
+  let wishX = -sin * c.forward + cos * c.strafe;
+  let wishZ = -cos * c.forward - sin * c.strafe;
+  const wishLength = Math.hypot(wishX, wishZ);
+  if (wishLength > 0.001) {
+    wishX /= wishLength;
+    wishZ /= wishLength;
   }
+  stepBody(player.body, dt, wishX, wishZ, wishLength, c.crouch, c.jump && !state.plantHeld);
 
-  function recoil(pitchKick, yawKick) {
-    player.pitch = Math.min(1.45, player.pitch + pitchKick);
-    player.yaw += yawKick;
+  if (input.consume('Digit1')) useSlot(player, 'primary');
+  if (input.consume('Digit2')) useSlot(player, 'sidearm');
+  if (input.consume('Digit4')) useSlot(player, 'cinder');
+  if (input.consume('Digit5')) useSlot(player, 'dazzle');
+  if (input.consume('KeyQ')) cycleSlot(player, 1);
+  const wheel = input.takeWheel();
+  if (wheel !== 0) cycleSlot(player, wheel > 0 ? 1 : -1);
+
+  if (c.reload) startReload(player);
+  const gun = currentGun(player);
+  if (gun !== null && gun.mag === 0 && player.reloadLeft <= 0) startReload(player);
+
+  const spec = currentSpec(player);
+  const down = c.fire && input.locked;
+  const live = state.phase === 'live' || state.phase === 'freeze';
+
+  if (spec !== null && live) {
+    const semi = spec.sound === 'pistol' || spec.sound === 'shotgun';
+    if (semi) {
+      if (down && !trigger.semiWasDown) tryFire(player, state.random);
+    } else if (down) {
+      tryFire(player, state.random);
+    }
+  } else if (down && !trigger.semiWasDown && player.slot === 'cinder') {
+    throwSelected(player, 'cinder');
+  } else if (down && !trigger.semiWasDown && player.slot === 'dazzle') {
+    throwSelected(player, 'dazzle');
   }
+  trigger.semiWasDown = down;
+  trigger.held = down;
 
-  function step(dt, keys) {
-    const crouching = keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC');
-    if (crouching && !player.crouching) {
-      player.crouching = true;
-      player.height = CROUCH_HEIGHT;
-    } else if (!crouching && player.crouching && !overlaps(player.position.x, player.position.y, player.position.z, STAND_HEIGHT, 0.02)) {
-      player.crouching = false;
-      player.height = STAND_HEIGHT;
-    }
-    const eyeTarget = player.crouching ? CROUCH_EYE : STAND_EYE;
-    player.eye += (eyeTarget - player.eye) * Math.min(1, dt * 12);
-
-    const forward = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
-    const strafe = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
-    wish.set(0, 0, 0);
-    if (forward || strafe) {
-      const sin = Math.sin(player.yaw);
-      const cos = Math.cos(player.yaw);
-      wish.set(-sin * forward + cos * strafe, 0, -cos * forward - sin * strafe).normalize();
-    }
-
-    const speed = player.crouching ? CROUCH_SPEED : WALK_SPEED;
-    const blend = Math.min(1, (player.onGround ? GROUND_ACCEL : AIR_ACCEL) * dt / speed);
-    player.velocity.x += (wish.x * speed - player.velocity.x) * blend;
-    player.velocity.z += (wish.z * speed - player.velocity.z) * blend;
-    if (player.onGround && !wish.lengthSq()) {
-      const damp = Math.max(0, 1 - FRICTION * dt);
-      player.velocity.x *= damp;
-      player.velocity.z *= damp;
-    }
-
-    if (keys.has('Space') && player.onGround) {
-      player.velocity.y = JUMP_SPEED;
-      player.onGround = false;
-    }
-    player.velocity.y -= GRAVITY * dt;
-
-    const nextX = player.position.x + player.velocity.x * dt;
-    if (!overlaps(nextX, player.position.y, player.position.z, player.height, 0.04)) player.position.x = nextX;
-    else player.velocity.x = 0;
-    const nextZ = player.position.z + player.velocity.z * dt;
-    if (!overlaps(player.position.x, player.position.y, nextZ, player.height, 0.04)) player.position.z = nextZ;
-    else player.velocity.z = 0;
-
-    player.position.y += player.velocity.y * dt;
-    player.onGround = false;
-    const hit = overlaps(player.position.x, player.position.y, player.position.z, player.height, 0);
-    if (hit && player.velocity.y <= 0) {
-      player.position.y = hit.max.y;
-      player.velocity.y = 0;
-      player.onGround = true;
-    } else if (hit) {
-      player.position.y = hit.min.y - player.height;
-      player.velocity.y = 0;
-    }
-    if (player.position.y < 0) {
-      player.position.y = 0;
-      player.velocity.y = 0;
-      player.onGround = true;
-    }
-    player.velocity.y = Math.max(-30, player.velocity.y);
-  }
-
-  return {
-    state: player,
-    step,
-    look,
-    recoil,
-    groundSpeed() {
-      return Math.hypot(player.velocity.x, player.velocity.z);
-    },
-  };
+  const site = siteAt(player.body.pos.x, player.body.pos.z);
+  const carrying = playerCarriesBomb();
+  state.plantHeld = Boolean(c.plant && carrying && site !== null && state.phase === 'live');
+  if (c.plant && carrying && site === null && state.messageTimer <= 0) say('Stand on A or B to plant.', 1.2);
 }

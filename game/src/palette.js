@@ -1,15 +1,11 @@
-// The look plan, in one place. Six values and one accent hue; the lighting makes every
-// shade the game needs, so no other colour appears in the code. The same six names are
-// the CSS custom properties in index.html.
+// The look: a salt terminal at dusk. Six surfaces and one signal orange. Every material in
+// the game takes its colour from here, so the scene reads as one place.
 export const PALETTE = {
-  canvas: '#14161a',
-  surface: '#1e2228',
-  hairline: '#2c323a',
-  ink: '#e9e6df',
-  muted: '#98a0a8',
-  accent: '#f0a830',
+  canvas: '#081012',
+  surface: '#243537',
+  hairline: '#3d5354',
+  ink: '#f0ead9',
+  muted: '#a3b9b4',
+  accent: '#e07a3c',
+  wound: '#8c3226',
 };
-
-export function shade(name) {
-  return PALETTE[name];
-}
